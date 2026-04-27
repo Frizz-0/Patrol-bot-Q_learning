@@ -1,0 +1,279 @@
+<?xml version="1.0" ?>
+
+<!-- Ths is a urdf file used to support the development of CW2 project -->
+<!-- Please use xacro to clean up the URDF file, i.e using the following 4 files to represent the robot model which are easier to read and maintain-->
+<!-- yourGroupidBot.xacro - A primary file that loads the following three files and contains only URDF items like joints and links -->
+<!-- yourGroupidBot.gazebo – It contains gazebo-specific labels including adding a Gazeo ROS control plugin  that are wrapped within gazebo -->
+<!-- materials.xacro: defining all the material properties such as color -->
+<!-- macros.xacro: defining macros for the caculation of inertial for example to help simplify -->
+
+<robot name="Group1Bot">
+    
+  <!-- all the gazebo tags -->
+  <gazebo reference="base_link_chassis">
+    <material>Gazebo/Orange</material>
+  </gazebo>
+  
+   <gazebo reference="left_wheel">
+	    <material>Gazebo/Blue</material>
+	    <mu1>1.0</mu1>
+	    <mu2>1.0</mu2>
+	    <kp>1000000.0</kp>
+	    <kd>100.0</kd>
+    </gazebo>
+    <gazebo reference="right_wheel">
+	    <material>Gazebo/Blue</material>
+	    <mu1>1.0</mu1>
+	    <mu2>1.0</mu2>
+	    <kp>1000000.0</kp>
+	    <kd>100.0</kd>
+    </gazebo>
+
+    <gazebo reference="caster_link">
+      <mu1>0.01</mu1>
+      <mu2>0.01</mu2>
+      <kp>1000000</kp>
+      <kd>100</kd>
+    </gazebo>
+  
+
+  <!--adding a differential drive plugin-->
+  <gazebo>
+  <plugin name="differential_drive_controller" filename="libgazebo_ros_diff_drive.so">
+    <alwaysOn>true</alwaysOn>
+    <updateRate>20</updateRate>
+    
+    <leftJoint>left_wheel_hinge</leftJoint>
+    <rightJoint>right_wheel_hinge</rightJoint>
+    
+    <wheelSeparation>0.3</wheelSeparation>
+    <wheelDiameter>0.2</wheelDiameter>
+    
+    <torque>15</torque>
+    <wheelAcceleration>1.0</wheelAcceleration>
+    
+    <commandTopic>Group1Bot/cmd_vel</commandTopic>
+    
+    <odometryTopic>odom</odometryTopic>
+    <odometryFrame>odom</odometryFrame>
+    <robotBaseFrame>base_link_chassis</robotBaseFrame>
+    
+    <legacyMode>false</legacyMode>
+    <publishWheelTF>false</publishWheelTF>
+    <publishOdomTF>true</publishOdomTF>
+    <publishWheelJointState>true</publishWheelJointState>
+    
+    <odometrySource>1</odometrySource>
+  </plugin>
+</gazebo>
+  
+  <gazebo reference="sensor_laser">
+    <sensor type="ray" name="head_hokuyo_sensor">
+      <pose>0 0 0 0 0 0</pose>
+      <visualize>true</visualize>
+      <update_rate>20</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>720</samples>
+            <resolution>1</resolution>
+            <min_angle>-1.570796</min_angle>
+            <max_angle>1.570796</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.10</min>
+          <max>10.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin name="gazebo_ros_head_hokuyo_controller" filename="libgazebo_ros_laser.so">
+        <topicName>/Group1Bot/laser/scan</topicName>
+        <frameName>sensor_laser</frameName>
+      </plugin>
+    </sensor>
+</gazebo>
+
+ <!--Create a robot chassis as Base Link -->
+ <link name="base_link_chassis">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="0.5 0.3 0.07"/>
+      </geometry>
+      <material name="black">
+        <color rgba="1.0 0.0 0.0 1.0"/>
+      </material>
+    </visual>
+
+    <inertial>
+      <mass value="5"/>
+      <origin rpy="0 0 0" xyz="0 0 0.1"/>
+      <inertia ixx="0.0395416666667" ixy="0" ixz="0" iyy="0.106208333333" iyz="0" izz="0.106208333333"/>
+    </inertial>
+    
+    <collision>
+      <geometry>
+        <box size="0.5 0.3 0.07"/>
+      </geometry>
+    </collision>
+ </link>
+ <link name="camera_link">
+  <visual>
+    <geometry>
+      <box size="0.05 0.05 0.05"/>
+    </geometry>
+    <material name="black">
+      <color rgba="0.0 0.0 0.0 1.0"/>
+    </material>
+  </visual>
+  
+  <inertial>
+    <mass value="0.05"/>
+    <inertia ixx="0.000004166" ixy="0" ixz="0" iyy="0.000004166" iyz="0" izz="0.000004166"/>
+  </inertial>
+  
+  <collision>
+    <geometry>
+      <box size="0.05 0.05 0.05"/>
+    </geometry>
+  </collision>
+</link>
+  
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link_chassis"/>
+    <child link="camera_link"/>
+    <origin xyz="0.1 0 0.15" rpy="0 0 0"/>
+  </joint>
+<gazebo reference="camera_link">
+  <sensor type="camera" name="robot_camera">
+    <update_rate>30.0</update_rate>
+    <camera name="head">
+      <horizontal_fov>1.3962634</horizontal_fov>
+      <image>
+        <width>640</width>
+        <height>480</height>
+        <format>R8G8B8</format>
+      </image>
+    </camera>
+    <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
+      <alwaysOn>true</alwaysOn>
+      <cameraName>Group1Bot/camera</cameraName>
+      <imageTopicName>image_raw</imageTopicName>
+      <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+      <frameName>camera_link</frameName>
+    </plugin>
+  </sensor>
+</gazebo>
+ <!--Create a separate caster Link for better physics and more control -->
+ <link name="caster_link">
+    <visual>
+        <geometry>
+            <sphere radius="0.05"/>
+         </geometry>
+    </visual>
+
+    <collision>
+        <geometry>
+         <sphere radius="0.05"/>
+        </geometry>
+    </collision>
+
+    <inertial>
+        <mass value="0.1"/>
+        <inertia ixx="0.0001" iyy="0.0001" izz="0.0001"
+             ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+    
+  <joint name="caster_joint" type="fixed">
+        <parent link="base_link_chassis"/>
+        <child link="caster_link"/>
+        <origin xyz="0.2 0 -0.05"/>
+  </joint>
+  
+  <!-- Create wheel right --> 
+  <link name="right_wheel">   
+    <visual name="right_wheel_visual">
+      <origin rpy="0 1.5707 1.5707" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.04" radius="0.1"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.2 0.2 1.0 1.0"/>
+      </material>      
+    </visual> 
+    <inertial>
+      <mass value="0.2"/>
+      <origin rpy="0 1.5707 1.5707" xyz="0 0 0"/>
+      <inertia ixx="0.00052666666" ixy="0" ixz="0" iyy="0.00052666666" iyz="0" izz="0.001"/>
+    </inertial>
+    
+    <collision name="right_wheel_collision">
+      <origin rpy="0 1.5707 1.5707" xyz="0 0 0" />
+      <geometry>
+        <cylinder length="0.04" radius="0.1"/>
+      </geometry>
+    </collision>
+  </link>
+    
+  <!--   Joint for right wheel  -->
+  <joint name="right_wheel_hinge" type="continuous">
+    <origin rpy="0 0 0" xyz="-0.05 0.15 0"/>
+    <child link="right_wheel" />
+    <parent link="base_link_chassis"/>
+    <axis rpy="0 0 0" xyz="0 1 0"/>
+    <limit effort="10000" velocity="1000"/>
+    <joint_properties damping="1.0" friction="1.0" />
+  </joint>  
+    
+  <!-- Left Wheel link -->
+  <link name="left_wheel">
+    <visual name="left_wheel_visual">
+      <origin rpy="0 1.5707 1.5707" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.04" radius="0.1"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.2 0.2 1.0 1.0"/>
+      </material>         
+    </visual>    
+    <inertial>
+      <mass value="0.2"/>
+      <origin rpy="0 1.5707 1.5707" xyz="0 0 0"/>
+      <inertia ixx="0.00052666666" ixy="0" ixz="0" iyy="0.00052666666" iyz="0" izz="0.001"/>
+    </inertial>
+    <collision name="left_wheel_collision">
+      <origin rpy="0 1.5707 1.5707" xyz="0 0 0" />
+      <geometry>
+        <cylinder length="0.04" radius="0.1"/>
+      </geometry>
+    </collision> 
+  </link>
+    
+  <!--   Joint for left wheel  -->
+  <joint name="left_wheel_hinge" type="continuous">
+    <origin rpy="0 0 0" xyz="-0.05 -0.15 0"/>
+    <child link="left_wheel" />
+    <parent link="base_link_chassis"/>
+    <axis rpy="0 0 0" xyz="0 1 0"/>
+    <limit effort="10000" velocity="1000"/>
+    <joint_properties damping="1.0" friction="1.0" />
+  </joint>
+
+  <!-- Laser Sensor Link -->
+  <link name="sensor_laser">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+
+  <!-- Joint to attach laser to chassis -->
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link_chassis"/>
+    <child link="sensor_laser"/>
+    <origin xyz="0.1 0 0.1" rpy="0 0 0"/>
+  </joint>
+    
+</robot>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- Phase 3: Full Hospital Patrol with Hidden Anomaly Detection
+       Prerequisite: Phase 2 complete (~/q_table_p2.pkl must exist)
+       Teaches: patrol full hospital route, find anomaly by camera only
+       Saves:   ~/q_table_p3.pkl
+       Note:    SR > 30% is strong — anomaly can be at the last waypoint
+                so some episodes always complete the full circuit. -->
+
+  <env name="GAZEBO_MODEL_PATH"
+       value="$(find com760cw2_group1)/world/aws-robomaker-hospital-world/models:$(find com760cw2_group1)/world/aws-robomaker-hospital-world/fuel_models" />
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find com760cw2_group1)/world/aws-robomaker-hospital-world/worlds/hospital.world"/>
+    <arg name="paused"        value="false"/>
+    <arg name="use_sim_time"  value="true"/>
+    <arg name="gui"           value="false"/>
+  </include>
+
+  <param name="robot_description" textfile="$(find com760cw2_group1)/urdf/Group1Bot.urdf" />
+
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model"
+        args="-param robot_description -urdf -model Group1Bot -x 0 -y 10 -z 0.5" />
+
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <param name="publish_frequency" value="20"/>
+  </node>
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+    <param name="publish_frequency" value="20"/>
+  </node>
+
+  <node name="phase3_trainer" pkg="com760cw2_group1" type="train_phase3_patrol.py"
+        output="screen" launch-prefix="bash -c 'sleep 5.0; $0 $@' " />
+</launch>

@@ -1,0 +1,5 @@
+bool flag           # True to start, False to stop
+float32 speed       # Desired travel speed
+string direction    # 'left' or 'right' for initial turn
+---
+string message      # Confirmation message (e.g., "Robot status updated")

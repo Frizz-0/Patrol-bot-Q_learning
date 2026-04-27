@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- Phase 1: Basic Navigation Training
+       Teaches: obstacle avoidance + reaching nearby random targets
+       Saves:   ~/q_table_p1.pkl
+       Stop:    when terminal shows SR > 60-70% -->
+
+  <env name="GAZEBO_MODEL_PATH"
+       value="$(find com760cw2_group1)/world/aws-robomaker-hospital-world/models:$(find com760cw2_group1)/world/aws-robomaker-hospital-world/fuel_models" />
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find com760cw2_group1)/world/aws-robomaker-hospital-world/worlds/hospital.world"/>
+    <arg name="paused"        value="false"/>
+    <arg name="use_sim_time"  value="true"/>
+    <arg name="gui"           value="True"/>
+  </include>
+
+  <param name="robot_description" textfile="$(find com760cw2_group1)/urdf/Group1Bot.urdf" />
+
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model"
+        args="-param robot_description -urdf -model Group1Bot -x 0 -y 10 -z 0.5" />
+
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <param name="publish_frequency" value="20"/>
+  </node>
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+    <param name="publish_frequency" value="20"/>
+  </node>
+
+  <node name="phase1_trainer" pkg="com760cw2_group1" type="train_phase1_basic_nav.py"
+        output="screen" launch-prefix="bash -c 'sleep 5.0; $0 $@' " />
+</launch>
