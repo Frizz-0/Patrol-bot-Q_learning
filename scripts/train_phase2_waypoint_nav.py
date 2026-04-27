@@ -42,15 +42,17 @@ SAVE_FILE   = os.path.expanduser('~/q_table_p2.pkl')
 # IMPORTANT: Verify these in Gazebo before running.
 # Robot spawns at (0, 10). Hover over the floor in Gazebo to get coordinates.
 # Each point should be in an open corridor or room, not inside a wall.
+# Waypoints derived from furniture positions in hospital.world.
+# Furniture can only sit on open floor, so these zones are confirmed navigable.
 PATROL_ROUTE = [
-    ( 0.0, 10.0),   # spawn / home corridor
-    ( 3.0, 10.5),   # east corridor
-    ( 6.0, 10.0),   # east wing entrance
-    ( 5.5,  7.5),   # south-east room
-    ( 2.5,  7.0),   # central area
-    ( 0.0,  7.5),   # south corridor
-    (-3.0,  7.5),   # west room
-    (-3.0, 10.5),   # west corridor
+    ( 0.0, 10.0),   # WP0 - spawn / north main corridor
+    (-5.0,  7.0),   # WP1 - west waiting area  (chairs at -4.8,6.5 & -7.9,6.5)
+    ( 0.0,  3.0),   # WP2 - front lobby         (nurses station at 0,1.5)
+    ( 5.0,  7.0),   # WP3 - east waiting area   (chairs at 5.2,6.6 & 8.2,6.6)
+    ( 0.0, 16.0),   # WP4 - north corridor       (between spawn & elevators at y=19.5)
+    ( 0.0, -4.0),   # WP5 - south junction       (table confirmed at 1.2,-5.6)
+    (-8.0,-12.0),   # WP6 - south-west wing      (curtains/beds at x≈-11,y≈-14)
+    ( 8.0,-17.0),   # WP7 - south-east wing      (curtains at 11.1,-17.8 to -21.4)
 ]
 
 
@@ -173,18 +175,31 @@ class Phase2Agent:
     # ── respawn ────────────────────────────────────────────────────────────
     def _respawn(self):
         self._ground_truth()
-        self.spawn_grace = 20   # longer grace — farther targets take more time to orient
+        self.spawn_grace = 20
 
-        # Pick a random patrol waypoint that's at least 2 m from the robot
-        wp = random.choice(PATROL_ROUTE)
+        # Curriculum over waypoints: start with nearby WPs, unlock farther ones
+        # as training progresses. WPs are sorted roughly by distance from spawn.
+        # Episodes 0-50:   WPs 0-3 only (lobby + waiting areas, all < 10 m)
+        # Episodes 50-150: WPs 0-5 (adds north corridor + south junction)
+        # Episodes 150+:   All WPs including south patient wings
+        if self.episode_count < 50:
+            candidate_wps = PATROL_ROUTE[:4]
+        elif self.episode_count < 150:
+            candidate_wps = PATROL_ROUTE[:6]
+        else:
+            candidate_wps = PATROL_ROUTE
+
+        # Pick from candidates, avoid spawning right on top of robot
+        wp = random.choice(candidate_wps)
         for _ in range(15):
-            wp = random.choice(PATROL_ROUTE)
+            wp = random.choice(candidate_wps)
             if np.linalg.norm(self.current_pos - np.array(wp)) > 2.0:
                 break
 
         x, y = wp
         self.current_target = np.array([x, y])
         target_dist = np.linalg.norm(self.current_pos - self.current_target)
+        unlocked = f"WPs 0-{len(candidate_wps)-1}"
 
         s = ModelState()
         s.model_name      = 'target_marker'
@@ -195,7 +210,7 @@ class Phase2Agent:
             self.set_state_proxy(s)
         except Exception:
             pass
-        rospy.loginfo(f"[P2] Waypoint ({x:.1f},{y:.1f}) | dist={target_dist:.1f}m")
+        rospy.loginfo(f"[P2] Waypoint ({x:.1f},{y:.1f}) dist={target_dist:.1f}m | {unlocked} unlocked")
 
     # ── reset ──────────────────────────────────────────────────────────────
     def _reset(self):

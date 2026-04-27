@@ -42,16 +42,16 @@ NUM_ACTIONS = 5
 LOAD_FILE   = os.path.expanduser('~/q_table_p2.pkl')
 SAVE_FILE   = os.path.expanduser('~/q_table_p3.pkl')
 
-# Must match Phase 2 waypoints exactly. Verify in Gazebo.
+# Derived from furniture positions in hospital.world (must match Phase 2 exactly).
 PATROL_ROUTE = [
-    ( 0.0, 10.0),   # WP0 — spawn / home corridor
-    ( 3.0, 10.5),   # WP1 — east corridor
-    ( 6.0, 10.0),   # WP2 — east wing entrance
-    ( 5.5,  7.5),   # WP3 — south-east room
-    ( 2.5,  7.0),   # WP4 — central area
-    ( 0.0,  7.5),   # WP5 — south corridor
-    (-3.0,  7.5),   # WP6 — west room
-    (-3.0, 10.5),   # WP7 — west corridor
+    ( 0.0, 10.0),   # WP0 - spawn / north main corridor
+    (-5.0,  7.0),   # WP1 - west waiting area
+    ( 0.0,  3.0),   # WP2 - front lobby / nurses station
+    ( 5.0,  7.0),   # WP3 - east waiting area
+    ( 0.0, 16.0),   # WP4 - north corridor (toward elevators)
+    ( 0.0, -4.0),   # WP5 - south junction
+    (-8.0,-12.0),   # WP6 - south-west patient wing
+    ( 8.0,-17.0),   # WP7 - south-east patient wing
 ]
 
 WP_REACH_DIST    = 1.5   # distance to advance to next waypoint
