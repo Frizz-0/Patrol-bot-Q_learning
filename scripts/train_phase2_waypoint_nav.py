@@ -283,16 +283,14 @@ class Phase2Agent:
         elif stuck and self.spawn_grace <= 0:
             self.stuck_count += 1
             self.pos_history.clear()
-            if self.stuck_count >= 3:
-                reward, is_terminal = -100.0, True
-            else:
-                reward = -30.0
-                spin = Twist()
-                spin.angular.z = 0.8 if self.stuck_count % 2 == 1 else -0.8
-                self.vel_pub.publish(spin)
-                rospy.logwarn(f"[P2] STUCK #{self.stuck_count} — recovery spin")
-                self.last_state = self.last_action = self.last_dist = None
-                return
+            penalty = min(30.0 * self.stuck_count, 150.0)
+            reward = -penalty
+            spin = Twist()
+            spin.angular.z = 0.8 if self.stuck_count % 2 == 1 else -0.8
+            self.vel_pub.publish(spin)
+            rospy.logwarn(f"[P2] STUCK #{self.stuck_count} — recovery spin (penalty={penalty:.0f})")
+            self.last_state = self.last_action = self.last_dist = None
+            return
         elif dist < self.goal_threshold:
             # Longer episodes → scale time bonus accordingly
             reward = 500.0 + max(0, (2000 - self.step_count)) * 0.2
@@ -323,8 +321,7 @@ class Phase2Agent:
 
         if is_terminal:
             reason = ("SUCCESS"   if dist < self.goal_threshold else
-                      "COLLISION" if collision else
-                      "STUCK"     if stuck else "TIMEOUT")
+                      "COLLISION" if collision else "TIMEOUT")
             if reason == "SUCCESS":
                 self.success_count += 1
             sr = self.success_count / max(self.episode_count + 1, 1) * 100

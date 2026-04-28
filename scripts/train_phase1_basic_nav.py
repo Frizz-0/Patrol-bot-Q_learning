@@ -43,7 +43,7 @@ class Phase1Agent:
 
         self.spawn_grace     = 0
         self.pos_history     = deque(maxlen=80)  # 4 s window at 20 Hz
-        self.stuck_count     = 0   # stuck events this episode; terminal at 3
+        self.stuck_count     = 0   # stuck events this episode; escalating penalty, never terminal
 
         self.last_dist   = None
         self.last_state  = None
@@ -243,19 +243,15 @@ class Phase1Agent:
             reward, is_terminal = -200.0, True
         elif stuck and self.spawn_grace <= 0:
             self.stuck_count += 1
-            self.pos_history.clear()          # reset window so it can detect again
-            if self.stuck_count >= 3:
-                reward, is_terminal = -100.0, True   # give up after 3 stuck events
-            else:
-                reward = -30.0                # penalty but keep going
-                # Force a recovery spin this step (overrides normal action below)
-                spin = Twist()
-                spin.angular.z = 0.8 if self.stuck_count % 2 == 1 else -0.8
-                self.vel_pub.publish(spin)
-                rospy.logwarn(f"[P1] STUCK #{self.stuck_count} — recovery spin")
-                self.last_state = self.last_action = None
-                self.last_dist  = None
-                return
+            self.pos_history.clear()
+            penalty = min(30.0 * self.stuck_count, 150.0)
+            reward = -penalty
+            spin = Twist()
+            spin.angular.z = 0.8 if self.stuck_count % 2 == 1 else -0.8
+            self.vel_pub.publish(spin)
+            rospy.logwarn(f"[P1] STUCK #{self.stuck_count} — recovery spin (penalty={penalty:.0f})")
+            self.last_state = self.last_action = self.last_dist = None
+            return
         elif dist < self.goal_threshold:
             reward = 500.0 + max(0, (1500 - self.step_count)) * 0.3
             is_terminal = True
@@ -285,8 +281,7 @@ class Phase1Agent:
 
         if is_terminal:
             reason = ("SUCCESS"   if dist < self.goal_threshold else
-                      "COLLISION" if collision else
-                      "STUCK"     if stuck else "TIMEOUT")
+                      "COLLISION" if collision else "TIMEOUT")
             if reason == "SUCCESS":
                 self.success_count += 1
             sr = self.success_count / max(self.episode_count + 1, 1) * 100

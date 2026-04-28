@@ -308,16 +308,14 @@ class Phase3Agent:
         elif stuck and self.spawn_grace <= 0:
             self.stuck_count += 1
             self.pos_history.clear()
-            if self.stuck_count >= 3:
-                reward, is_terminal = -100.0, True
-            else:
-                reward = -30.0
-                spin = Twist()
-                spin.angular.z = 0.8 if self.stuck_count % 2 == 1 else -0.8
-                self.vel_pub.publish(spin)
-                rospy.logwarn(f"[P3] STUCK #{self.stuck_count} — recovery spin")
-                self.last_state = self.last_action = self.last_dist = None
-                return
+            penalty = min(30.0 * self.stuck_count, 150.0)
+            reward = -penalty
+            spin = Twist()
+            spin.angular.z = 0.8 if self.stuck_count % 2 == 1 else -0.8
+            self.vel_pub.publish(spin)
+            rospy.logwarn(f"[P3] STUCK #{self.stuck_count} — recovery spin (penalty={penalty:.0f})")
+            self.last_state = self.last_action = self.last_dist = None
+            return
 
         elif anomaly_found:
             # Bonus for finding early (fewer waypoints visited = faster patrol)
@@ -368,8 +366,6 @@ class Phase3Agent:
             elif collision:
                 reason = "COLLISION"
                 self.collision_count += 1
-            elif stuck:
-                reason = "STUCK"
             else:
                 reason = f"TIMEOUT (anomaly was at WP{self.anomaly_wp_idx})"
 
