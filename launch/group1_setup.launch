@@ -2,20 +2,20 @@
 <launch>
   <!-- Set GAZEBO_MODEL_PATH to include hospital world models -->
   <env name="GAZEBO_MODEL_PATH" value="$(find com760cw2_group1)/world/aws-robomaker-hospital-world/models:$(find com760cw2_group1)/world/aws-robomaker-hospital-world/fuel_models" />
-<!--   
+  
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find com760cw2_group1)/world/group1_navigation.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="true"/>
-  </include> -->
+  </include>
 
-  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+  <!-- <include file="$(find gazebo_ros)/launch/empty_world.launch">
   <arg name="world_name" value="$(find com760cw2_group1)/world/aws-robomaker-hospital-world/worlds/hospital.world"/>
   <arg name="paused" value="false"/>
   <arg name="use_sim_time" value="true"/>
   <arg name="gui" value="False"/>
-  </include>
+  </include> -->
   
   
 

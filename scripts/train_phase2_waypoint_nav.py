@@ -78,11 +78,11 @@ class Phase2Agent:
         self.prev_pos    = np.array([0.0, 0.0])
         self.robot_yaw   = 0.0
 
-        self.alpha         = 0.15   # slightly lower — fine-tuning on top of P1
+        self.alpha         = 0.25   # slightly lower — fine-tuning on top of P1
         self.gamma         = 0.95
-        self.epsilon       = 0.5    # start mid-range since P1 gave us a base
+        self.epsilon       = 0.8    # start mid-range since P1 gave us a base
         self.epsilon_min   = 0.05
-        self.epsilon_decay = 0.998  # decay slower — longer episodes
+        self.epsilon_decay = 0.993  # decay slower — longer episodes
 
         self.current_target = np.array([0.0, 0.0])
         self.goal_threshold = 2.0   # slightly wider for longer-range targets
@@ -133,6 +133,13 @@ class Phase2Agent:
         v = [x for x in ranges if math.isfinite(x) and x > 0.01]
         return min(v) if v else float('inf')
 
+    # For states NOT in Phase 1 Q-table, learn faster
+    def compute_alpha(self, state):
+        if state in self.q_table:
+            return 0.15  # trust Phase 1, learn slowly
+        else:
+            return 0.3   # new state, learn aggressively
+    
     def _ground_truth(self):
         try:
             res = self.get_model_proxy('Group1Bot', 'world')
@@ -152,65 +159,60 @@ class Phase2Agent:
 
     # ── state ─────────────────────────────────────────────────────────────
     def _state(self, msg, dist):
-        sector_starts = [0, 144, 288, 432, 576]
+        # 3 laser sectors: left, center, right (NOT distance-dependent)
         def level(r):
             d = self._safe_min(r)
             return 0 if d < 0.5 else (1 if d < 1.2 else 2)
-        ls = tuple(level(msg.ranges[s:s+144]) for s in sector_starts)
+        
+        # Left: idx 0-240 (-90° to -30°)
+        # Center: idx 240-480 (-30° to +30°)
+        # Right: idx 480-720 (+30° to +90°)
+        ls = (
+            level(msg.ranges[0:240]),      # left
+            level(msg.ranges[240:480]),    # center (front)
+            level(msg.ranges[480:720])     # right
+        )
 
+        # 4 heading bins (instead of 8) to simplify target direction encoding
         ang = math.atan2(self.current_target[1] - self.current_pos[1],
                          self.current_target[0] - self.current_pos[0])
         err = ang - self.robot_yaw
         while err >  math.pi: err -= 2*math.pi
         while err < -math.pi: err += 2*math.pi
-        hd = int(((err + math.pi) / (2*math.pi)) * 8) % 8
+        hd = int(((err + math.pi) / (2*math.pi)) * 4) % 4
 
-        dist_bin = min(int(dist), 7)
-        cam = 0
-        if self.target_visible:
-            cam = 1 if self.visual_error < -0.25 else (3 if self.visual_error > 0.25 else 2)
-
-        return str(ls + (hd, dist_bin, cam))
+        # State: (left, center, right, heading) → 3^3 × 4 = 108 states
+        # Camera is used for reward shaping only, NOT in state
+        return str(ls + (hd,))
 
     # ── respawn ────────────────────────────────────────────────────────────
     def _respawn(self):
         self._ground_truth()
         self.spawn_grace = 20
 
-        # Curriculum over waypoints: start with nearby WPs, unlock farther ones
-        # as training progresses. WPs are sorted roughly by distance from spawn.
-        # Episodes 0-50:   WPs 0-3 only (lobby + waiting areas, all < 10 m)
-        # Episodes 50-150: WPs 0-5 (adds north corridor + south junction)
-        # Episodes 150+:   All WPs including south patient wings
-        if self.episode_count < 50:
-            candidate_wps = PATROL_ROUTE[:4]
-        elif self.episode_count < 150:
-            candidate_wps = PATROL_ROUTE[:6]
-        else:
-            candidate_wps = PATROL_ROUTE
+        # Leash logic: target directly in front, distance increases with episodes
+        # Start at 2m, increase by 0.05m per episode, max 15m
+        target_dist = min(2.0 + self.episode_count * 0.05, 15.0)
+        
+        angle = random.uniform(0, 2*math.pi)  # randomize target angle for more diverse navigation
+        # Target in front of current position (robot faces +y at spawn)
+        # target_x = self.current_pos[0] + target_dist * math.sin(self.robot_yaw)
+        # target_y = self.current_pos[1] + target_dist * math.cos(self.robot_yaw)
+        target_x = self.current_pos[0] + target_dist * math.cos(angle)
+        target_y = self.current_pos[1] + target_dist * math.sin(angle)
 
-        # Pick from candidates, avoid spawning right on top of robot
-        wp = random.choice(candidate_wps)
-        for _ in range(15):
-            wp = random.choice(candidate_wps)
-            if np.linalg.norm(self.current_pos - np.array(wp)) > 2.0:
-                break
-
-        x, y = wp
-        self.current_target = np.array([x, y])
-        target_dist = np.linalg.norm(self.current_pos - self.current_target)
-        unlocked = f"WPs 0-{len(candidate_wps)-1}"
+        self.current_target = np.array([target_x, target_y])
 
         s = ModelState()
         s.model_name      = 'target_marker'
-        s.pose.position.x = x
-        s.pose.position.y = y
+        s.pose.position.x = target_x
+        s.pose.position.y = target_y
         s.pose.position.z = 0.05
         try:
             self.set_state_proxy(s)
         except Exception:
             pass
-        rospy.loginfo(f"[P2] Waypoint ({x:.1f},{y:.1f}) dist={target_dist:.1f}m | {unlocked} unlocked")
+        rospy.loginfo(f"[P2] Leash target ({target_x:.2f},{target_y:.2f}) dist={target_dist:.1f}m | EP {self.episode_count}")
 
     # ── reset ──────────────────────────────────────────────────────────────
     def _reset(self):
@@ -275,11 +277,15 @@ class Phase2Agent:
         stuck = (len(self.pos_history) == 80 and
                  np.linalg.norm(self.pos_history[-1] - self.pos_history[0]) < 0.5)
 
-        reward      = -0.3
+        reward      = 0.0
         is_terminal = False
 
+        front_laser = self._safe_min(msg.ranges[240:480])
+        if front_laser < 1.5:
+            reward -= (1.5 - front_laser) **2 * 500.0  # heavy penalty for being too close to obstacles
+        
         if collision and self.spawn_grace <= 0:
-            reward, is_terminal = -200.0, True
+            reward, is_terminal = -5000.0, True
         elif stuck and self.spawn_grace <= 0:
             self.stuck_count += 1
             self.pos_history.clear()
@@ -293,31 +299,48 @@ class Phase2Agent:
             return
         elif dist < self.goal_threshold:
             # Longer episodes → scale time bonus accordingly
-            reward = 500.0 + max(0, (2000 - self.step_count)) * 0.2
+            reward = 10000.0 + max(0, (2000 - self.step_count)) * 0.2
             is_terminal = True
         elif self.step_count > 2000:
-            reward, is_terminal = -50.0, True
+            reward, is_terminal = -100.0, True
         else:
-            reward += progress * 300.0
+            reward += progress * 500.0
             front = self._safe_min(msg.ranges[216:504])
             if front < 1.2:
                 reward -= (1.2 - front) * 5.0
+            # if front > 1.5:
+            #     reward += 2.0
             if self.target_visible:
                 reward += 2.0
                 if abs(self.visual_error) < 0.25:
                     reward += 1.0
-            reward -= 0.02 * dist
+            reward -= 0.1 * dist
+
+        # Direct steering from ground truth instead of table actions
+        angle_to_target = math.atan2(self.current_target[1] - self.current_pos[1],
+                                     self.current_target[0] - self.current_pos[0])
+        err = angle_to_target - self.robot_yaw
+        while err > math.pi: err -= 2 * math.pi
+        while err < -math.pi: err += 2 * math.pi
+
+        mv = Twist()
+        mv.angular.z = max(-1.0, min(1.0, 1.0 * err))
+
+        if front_laser > 1.5:
+            forward_factor = 1.0
+        elif front_laser > 1.2:
+            forward_factor = 0.4
+        else:
+            forward_factor = 0.0
+
+        orientation_factor = max(0.0, 1.0 - abs(err) / (math.pi / 2))
+        mv.linear.x = 0.35 * forward_factor * orientation_factor
+
+        if front_laser > 1.5:
+            reward += mv.linear.x * 20.0  # heavy bonus for forward movement
 
         self.total_ep_reward += reward
         self.step_count      += 1
-
-        if self.last_state is not None:
-            self.q_table.setdefault(self.last_state, self._default_q())
-            self.q_table.setdefault(state,           self._default_q())
-            mx = max(self.q_table[state])
-            self.q_table[self.last_state][self.last_action] += self.alpha * (
-                reward + self.gamma * mx - self.q_table[self.last_state][self.last_action]
-            )
 
         if is_terminal:
             reason = ("SUCCESS"   if dist < self.goal_threshold else
@@ -343,28 +366,15 @@ class Phase2Agent:
             self.total_ep_reward = self.step_count = 0
             return
 
-        self.q_table.setdefault(state, self._default_q())
-        action = (random.choice(self.actions) if random.random() < self.epsilon
-                  else self._argmax_tie(self.q_table[state]))
-
-        names = {0:"FWD",1:"LEFT",2:"RIGHT",3:"FWD+L",4:"FWD+R"}
         sr = self.success_count / max(self.episode_count, 1) * 100
         rospy.loginfo_throttle(1.0,
             f"[P2 EP{self.episode_count:04d}|{self.step_count:04d}] "
-            f"{names[action]} DIST:{dist:.2f}m R:{reward:.1f} "
+            f"PCTRL ERR:{math.degrees(err):.1f}deg DIST:{dist:.2f}m R:{reward:.1f} "
             f"CAM:{'Y' if self.target_visible else 'N'} SR:{sr:.1f}%")
 
-        mv = Twist()
-        if   action == 0: mv.linear.x  =  0.35
-        elif action == 1: mv.angular.z =  0.7
-        elif action == 2: mv.angular.z = -0.7
-        elif action == 3: mv.linear.x, mv.angular.z =  0.2,  0.45
-        else:             mv.linear.x, mv.angular.z =  0.2, -0.45
         self.vel_pub.publish(mv)
 
-        self.last_state  = state
-        self.last_action = action
-        self.last_dist   = dist
+        self.last_dist = dist
 
 
 if __name__ == '__main__':

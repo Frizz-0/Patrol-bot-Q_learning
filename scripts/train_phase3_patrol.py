@@ -165,25 +165,29 @@ class Phase3Agent:
     # ── state ─────────────────────────────────────────────────────────────
     def _state(self, msg, dist):
         # dist here is distance to current patrol waypoint (nav target)
-        sector_starts = [0, 144, 288, 432, 576]
         def level(r):
             d = self._safe_min(r)
             return 0 if d < 0.5 else (1 if d < 1.2 else 2)
-        ls = tuple(level(msg.ranges[s:s+144]) for s in sector_starts)
+
+        # Left: idx 0-240 (-90° to -30°)
+        # Center: idx 240-480 (-30° to +30°)
+        # Right: idx 480-720 (+30° to +90°)
+        ls = (
+            level(msg.ranges[0:240]),      # left
+            level(msg.ranges[240:480]),    # center (front)
+            level(msg.ranges[480:720])     # right
+        )
 
         ang = math.atan2(self.current_target[1] - self.current_pos[1],
                          self.current_target[0] - self.current_pos[0])
         err = ang - self.robot_yaw
         while err >  math.pi: err -= 2*math.pi
         while err < -math.pi: err += 2*math.pi
-        hd = int(((err + math.pi) / (2*math.pi)) * 8) % 8
+        hd = int(((err + math.pi) / (2*math.pi)) * 4) % 4
 
-        dist_bin = min(int(dist), 7)
-        cam = 0
-        if self.target_visible:
-            cam = 1 if self.visual_error < -0.25 else (3 if self.visual_error > 0.25 else 2)
-
-        return str(ls + (hd, dist_bin, cam))
+        # State: (left, center, right, heading) → 3^3 × 4 = 108 states
+        # Distance and camera removed from state (camera used for reward only)
+        return str(ls + (hd,))
 
     # ── episode start ──────────────────────────────────────────────────────
     def _start_episode(self):
@@ -303,7 +307,7 @@ class Phase3Agent:
         is_terminal = False
 
         if collision and self.spawn_grace <= 0:
-            reward, is_terminal = -200.0, True
+            reward, is_terminal = -5000.0, True
 
         elif stuck and self.spawn_grace <= 0:
             self.stuck_count += 1
@@ -320,7 +324,7 @@ class Phase3Agent:
         elif anomaly_found:
             # Bonus for finding early (fewer waypoints visited = faster patrol)
             efficiency_bonus = max(0, len(PATROL_ROUTE) - self.waypoints_visited) * 30
-            reward      = 800.0 + efficiency_bonus
+            reward      = 10000.0 + efficiency_bonus
             is_terminal = True
 
         elif self.step_count > MAX_STEPS:

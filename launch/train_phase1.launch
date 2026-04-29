@@ -30,4 +30,6 @@
 
   <node name="phase1_trainer" pkg="com760cw2_group1" type="train_phase1_basic_nav.py"
         output="screen" launch-prefix="bash -c 'sleep 5.0; $0 $@' " />
+
+ <node name="image_view" pkg="rqt_image_view" type="rqt_image_view" args="/Group1Bot/camera/image_raw"/>
 </launch>

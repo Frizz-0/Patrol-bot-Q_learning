@@ -127,40 +127,43 @@ class Phase1Agent:
 
     # ── state ─────────────────────────────────────────────────────────────
     def _state(self, msg, dist):
-        sector_starts = [0, 144, 288, 432, 576]
+        # 3 laser sectors: left, center, right
         def level(r):
             d = self._safe_min(r)
             return 0 if d < 0.5 else (1 if d < 1.2 else 2)
-        ls = tuple(level(msg.ranges[s:s+144]) for s in sector_starts)
+        
+        # Left: idx 0-240 (-90° to -30°)
+        # Center: idx 240-480 (-30° to +30°)
+        # Right: idx 480-720 (+30° to +90°)
+        ls = (
+            level(msg.ranges[0:240]),      # left
+            level(msg.ranges[240:480]),    # center (front)
+            level(msg.ranges[480:720])     # right
+        )
 
+        # 4 heading bins (instead of 8) to simplify target direction encoding
         ang = math.atan2(self.current_target[1] - self.current_pos[1],
                          self.current_target[0] - self.current_pos[0])
         err = ang - self.robot_yaw
         while err >  math.pi: err -= 2*math.pi
         while err < -math.pi: err += 2*math.pi
-        hd = int(((err + math.pi) / (2*math.pi)) * 8) % 8
+        hd = int(((err + math.pi) / (2*math.pi)) * 4) % 4
 
-        dist_bin = min(int(dist), 7)
-        cam = 0
-        if self.target_visible:
-            cam = 1 if self.visual_error < -0.25 else (3 if self.visual_error > 0.25 else 2)
-
-        return str(ls + (hd, dist_bin, cam))
+        # State: (left, center, right, heading) → 3^3 × 4 = 108 states
+        # Distance and camera removed from state (camera used for rewards only)
+        return str(ls + (hd,))
 
     # ── respawn ────────────────────────────────────────────────────────────
     def _respawn(self):
         self._ground_truth()
         self.spawn_grace = 15
 
-        # Curriculum: targets start at 1.5 m, expand 0.01 m/episode up to 5 m
-        max_d = min(1.5 + self.episode_count * 0.01, 5.0)
-        for _ in range(30):
-            angle = random.uniform(0, 2*math.pi)
-            d     = random.uniform(1.5, max_d)
-            x = self.current_pos[0] + d * math.cos(angle)
-            y = self.current_pos[1] + d * math.sin(angle)
-            if d > 1.2:
-                break
+        # PHASE 1: Always 2m in front, small random variation (±20°)
+        # This teaches the agent that heading-0 + forward = success
+        angle_offset = random.uniform(-0.35, 0.35)  # ±20° around front
+        d = 2.0
+        x = self.current_pos[0] + d * math.cos(angle_offset)
+        y = self.current_pos[1] - d * math.sin(angle_offset)
 
         self.current_target = np.array([x, y])
         s = ModelState()
@@ -172,7 +175,7 @@ class Phase1Agent:
             self.set_state_proxy(s)
         except Exception:
             pass
-        rospy.loginfo(f"[P1] Target ({x:.2f},{y:.2f}) | dist={d:.1f}m max={max_d:.1f}m")
+        rospy.loginfo(f"[P1] Target ({x:.2f},{y:.2f}) | 2m front, ±20° variation")
 
     # ── reset ──────────────────────────────────────────────────────────────
     def _reset(self):
@@ -240,7 +243,7 @@ class Phase1Agent:
         is_terminal = False
 
         if collision and self.spawn_grace <= 0:
-            reward, is_terminal = -200.0, True
+            reward, is_terminal = -5000.0, True
         elif stuck and self.spawn_grace <= 0:
             self.stuck_count += 1
             self.pos_history.clear()
@@ -253,7 +256,7 @@ class Phase1Agent:
             self.last_state = self.last_action = self.last_dist = None
             return
         elif dist < self.goal_threshold:
-            reward = 500.0 + max(0, (1500 - self.step_count)) * 0.3
+            reward = 10000.0 + max(0, (1500 - self.step_count)) * 0.3
             is_terminal = True
         elif self.step_count > 1500:
             reward, is_terminal = -50.0, True
