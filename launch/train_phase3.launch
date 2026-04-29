@@ -17,7 +17,7 @@
     <arg name="gui"           value="True"/>
   </include>
 
-  <param name="robot_description" textfile="$(find com760cw2_group1)/urdf/Group1Bot.urdf" />
+  <!-- <param name="robot_description" textfile="$(find com760cw2_group1)/urdf/Group1Bot.urdf" /> -->
 
   <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model"
         args="-param robot_description -urdf -model Group1Bot -x 0 -y 10 -z 0.5" />

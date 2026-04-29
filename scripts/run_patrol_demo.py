@@ -314,11 +314,11 @@ class PatrolDemo:
         )
 
         mv = Twist()
-        if   action == 0: mv.linear.x  =  0.35
-        elif action == 1: mv.angular.z =  0.7
-        elif action == 2: mv.angular.z = -0.7
-        elif action == 3: mv.linear.x, mv.angular.z =  0.2,  0.45
-        else:             mv.linear.x, mv.angular.z =  0.2, -0.45
+        if   action == 0: mv.linear.x  =  1.6
+        elif action == 1: mv.angular.z =  2.5
+        elif action == 2: mv.angular.z = -2.5
+        elif action == 3: mv.linear.x, mv.angular.z =  1.35,  1.9
+        else:             mv.linear.x, mv.angular.z =  1.35, -1.9
         self.vel_pub.publish(mv)
 
 

@@ -18,7 +18,8 @@
   <param name="robot_description" textfile="$(find com760cw2_group1)/urdf/Group1Bot.urdf" />
 
   <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model"
-        args="-param robot_description -urdf -model Group1Bot -x 0 -y 10 -z 0.5" />
+        args="-param robot_description -urdf -model Group1Bot -x 0 -y 10 -z 0.5"
+        launch-prefix="bash -c 'sleep 7.0; rosservice call /gazebo/delete_model &quot;{model_name: Group1Bot}&quot; 2>/dev/null || true; exec $0 $@' " />
 
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
     <param name="publish_frequency" value="20"/>
